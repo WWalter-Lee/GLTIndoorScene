@@ -9,7 +9,7 @@ We present GLTScene, a novel data-driven method for high-quality furniture layou
 
 # Installation & Dependencies & Dataset 
 
-Our code is developed based on the ATISS code framework, with the same Installation, Dependencies and Dataset and as [ATISS](https://github.com/nv-tlabs/ATISS?tab=readme-ov-file).
+Our code is developed based on the ATISS code framework, with the same Installation, Dependencies and Dataset as [ATISS](https://github.com/nv-tlabs/ATISS?tab=readme-ov-file).
 
 # Data Preprocessing
 
