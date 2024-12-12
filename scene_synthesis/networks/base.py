@@ -1,3 +1,9 @@
+# 
+# Copyright (C) 2021 NVIDIA Corporation.  All rights reserved.
+# Modifications Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+#
 
 import torch
 import torch.nn as nn
@@ -6,9 +12,12 @@ import torch.nn as nn
 class FixedPositionalEncoding(nn.Module):
     def __init__(self, proj_dims, val=0.1):
         super().__init__()
-        ll = proj_dims//2  #
-        exb = 2 * torch.linspace(0, ll-1, ll) / proj_dims  #
-        # a = torch.pow(val, exb)  #
+        '''
+            值都是确定的，没有可学习的参数
+        '''
+        ll = proj_dims//2  # 64//2=32
+        exb = 2 * torch.linspace(0, ll-1, ll) / proj_dims  # 生成从0到1均匀增大的32个值
+        # a = torch.pow(val, exb)
         self.sigma = 1.0 / torch.pow(val, exb).view(1, -1)  #
         self.sigma = 2 * torch.pi * self.sigma  # (1~10)*2pi
 
@@ -20,10 +29,16 @@ class FixedPositionalEncoding(nn.Module):
 
 
 def sample_from_dmll(pred, num_classes=256):
+    """Sample from mixture of logistics.
+    从分布中采样
+    Arguments
+    ---------
+        pred: NxC where C is 3*number of logistics
+    """
     assert len(pred.shape) == 2
 
     N = pred.size(0)
-    nr_mix = pred.size(1) // 3  #
+    nr_mix = pred.size(1) // 3  # 分布的数量
 
     probs = torch.softmax(pred[:, :nr_mix], dim=-1)
     means = pred[:, nr_mix:2 * nr_mix]
@@ -40,6 +55,7 @@ def sample_from_dmll(pred, num_classes=256):
 
 
 def optimizer_factory(config, parameters):
+    """Based on the input arguments create a suitable optimizer object."""
     optimizer = config.get("optimizer", "Adam")
     lr = config.get("lr", 1e-3)
     momentum = config.get("momentum", 0.9)

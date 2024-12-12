@@ -1,3 +1,12 @@
+#
+# Copyright (C) 2021 NVIDIA Corporation.  All rights reserved.
+# Modifications Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+#
+
+from functools import partial
+import os
 import torch
 try:
     from radam import RAdam
@@ -15,6 +24,7 @@ from .hidden_to_fine import AutoregressiveDMLL
 from .feature_extractors import get_feature_extractor
 
 def optimizer_factory(config, parameters_rough, parameters_fine):
+    """Based on the provided config create the suitable optimizer."""
     optimizer = config.get("optimizer", "Adam")
     lr = config.get("lr", 1e-3)
     momentum = config.get("momentum", 0.9)
@@ -80,13 +90,17 @@ def build_network(
         ).to(device)
     else:
         raise NotImplementedError()
+    # 推断时加载的模型
+    # Check whether there is a weight file provided to continue training from
     if weight_file is not None:
         path, number = weight_file.split("model")
         print("Loading weight file from {}".format(weight_file))
+
         network_rough.load_state_dict(
             torch.load(path + "model_rough" + number, map_location=device)
         )
         print("rough:", number)
+
         network_fine.load_state_dict(
             torch.load(path + "model_fine" + number, map_location=device)
         )

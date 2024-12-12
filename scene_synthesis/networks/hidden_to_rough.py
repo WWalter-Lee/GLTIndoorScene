@@ -1,3 +1,9 @@
+#
+# Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+#
+
 import torch
 import torch.nn as nn
 
@@ -6,6 +12,9 @@ from .base import FixedPositionalEncoding, sample_from_dmll
 from .hidden_to_fine import Hidden2Output
 
 class AutoregressiveDMLL_Rough(Hidden2Output):
+    '''
+    仿照AutoregressiveDMLL，区别在于不考虑角度，并且用的tr都是绝对坐标
+    '''
     def __init__(
         self,
         hidden_size,
@@ -17,7 +26,7 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
         super().__init__(hidden_size, n_classes, with_extra_fc)
 
         if not isinstance(n_mixtures, list):
-            n_mixtures = [n_mixtures]*6
+            n_mixtures = [n_mixtures]*6  # list:6:[10,10,...],原本的7包含的是位置(3)+尺寸(3)+角度(1)
 
         # Positional embedding for the target translation
         self.pe_trans = FixedPositionalEncoding(proj_dims=64)
@@ -27,9 +36,9 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
         self.fc_class_labels = nn.Linear(n_classes, 64)
 
         # q + class -> trans
-        c_hidden_size = hidden_size + 64
+        c_hidden_size = hidden_size + 64  # 512+64=576
         self.centroid_layer_x = AutoregressiveDMLL_Rough._mlp(
-            c_hidden_size, n_mixtures[0]*3
+            c_hidden_size, n_mixtures[0]*3  # (hidden_size, 30)
         )
         self.centroid_layer_y = AutoregressiveDMLL_Rough._mlp(
             c_hidden_size, n_mixtures[1]*3
@@ -39,7 +48,7 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
         )
 
         # q + class + trans -> size
-        c_hidden_size = c_hidden_size + 64 * 3
+        c_hidden_size = c_hidden_size + 64 * 3  # 576+64*3=768
         self.size_layer_x = AutoregressiveDMLL_Rough._mlp(
             c_hidden_size, n_mixtures[3]*3
         )
@@ -119,18 +128,18 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
         C = self.n_classes
 
         # Sample the class
-        class_probs = torch.softmax(class_labels, dim=-1).view(B*L, C)  # (1,1,23)(logits)->(1,23)
+        class_probs = torch.softmax(class_labels, dim=-1).view(B*L, C)  # (1,1,23)(logits)->(1,23)(概率)
         a = class_probs[0,-1]
-        sampled_classes = torch.multinomial(class_probs, 1).view(B, L)  #
-        return torch.eye(C, device=x.device)[sampled_classes]  #
+        sampled_classes = torch.multinomial(class_probs, 1).view(B, L)
+        return torch.eye(C, device=x.device)[sampled_classes]  # 返回one-hot向量，只在预测的类别为1
 
     def sample_translations(self, x, class_labels):
         # Extract the sizes in local variables for convenience
         B, L, _ = class_labels.shape
 
-        c = self.fc_class_labels(class_labels)  #
+        c = self.fc_class_labels(class_labels)  # 将预测的类别投回特征向量
         cf = torch.cat([x, c], dim=-1)
-        translations_x = self.centroid_layer_x(cf)  #
+        translations_x = self.centroid_layer_x(cf)  # MLP # (1,1,30)，获得x的分布(三个值确定分布)
         translations_y = self.centroid_layer_y(cf)
         translations_z = self.centroid_layer_z(cf)
 
@@ -198,19 +207,19 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
             dmll_params_from_pred(t_z)
 
     def forward(self, x, sample_params):
-
-        if self.with_extra_fc:  #
+        # x就是输入的q,(128,1,512)
+        if self.with_extra_fc:
             x = self.hidden2output(x)
-
+        # 获取gt
         target_properties = AutoregressiveDMLL_Rough._extract_properties_from_target(sample_params)
 
         class_labels = target_properties[0]
         translations = target_properties[1]
 
-        #
-        c = self.fc_class_labels(class_labels)  #
+        # 将gt转换成feature，teacher forcing
+        c = self.fc_class_labels(class_labels)  # (128,1,23->64)
 
-        tx = self.pe_trans(translations[:, :, 0:1])  #
+        tx = self.pe_trans(translations[:, :, 0:1])  # (128,1,1->64)
         ty = self.pe_trans(translations[:, :, 1:2])
         tz = self.pe_trans(translations[:, :, 2:3])
 
@@ -218,7 +227,8 @@ class AutoregressiveDMLL_Rough(Hidden2Output):
         class_labels = self.class_layer(x)
 
         # q + class_gt -> trans
-        cf = torch.cat([x, c], dim=-1)  #
+        cf = torch.cat([x, c], dim=-1)  # 将q和类别gt拼接预测位置，teacher forcing
+        # Using the true class label we now want to predict the translations
         translations = (
             self.centroid_layer_x(cf),
             self.centroid_layer_y(cf),

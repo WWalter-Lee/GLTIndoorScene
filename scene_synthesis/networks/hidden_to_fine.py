@@ -1,3 +1,8 @@
+#
+# Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+#
 
 import torch
 import torch.nn as nn
@@ -55,7 +60,7 @@ class AutoregressiveDMLL(Hidden2Output):
         super().__init__(hidden_size, n_classes, with_extra_fc)
 
         if not isinstance(n_mixtures, list):
-            n_mixtures = [n_mixtures]*7  # list:7:[10,10,...]
+            n_mixtures = [n_mixtures]*7
 
         self.class_layer = nn.Linear(hidden_size, n_classes)
 
@@ -162,18 +167,17 @@ class AutoregressiveDMLL(Hidden2Output):
         C = self.n_classes
 
         # Sample the class
-        class_probs = torch.softmax(class_labels, dim=-1).view(B*L, C)  # (1,1,23)(logits)->(1,23)
-
-        sampled_classes = torch.multinomial(class_probs, 1).view(B, L)  #
-        return torch.eye(C, device=x.device)[sampled_classes]  #
+        class_probs = torch.softmax(class_labels, dim=-1).view(B*L, C)
+        sampled_classes = torch.multinomial(class_probs, 1).view(B, L)
+        return torch.eye(C, device=x.device)[sampled_classes]  # 返回one-hot向量，只在预测的类别为1
 
     def sample_translations(self, x, class_labels):
         # Extract the sizes in local variables for convenience
         B, L, _ = class_labels.shape
 
-        c = self.fc_class_labels(class_labels)  #
+        c = self.fc_class_labels(class_labels)  # 将预测的类别投回特征向量
         cf = torch.cat([x, c], dim=-1)
-        translations_x = self.centroid_layer_x(cf)  # MLP # (1,1,30)
+        translations_x = self.centroid_layer_x(cf)
         translations_y = self.centroid_layer_y(cf)
         translations_z = self.centroid_layer_z(cf)
 
@@ -243,6 +247,7 @@ class AutoregressiveDMLL(Hidden2Output):
 
             return probs, means, scales
 
+        # Extract the sizes in local variables for convenience
         B, L, _ = class_labels.shape
 
         c = self.fc_class_labels(class_labels)
@@ -255,31 +260,32 @@ class AutoregressiveDMLL(Hidden2Output):
             dmll_params_from_pred(t_z)
 
     def forward(self, x, sample_params):
-        #
-        if self.with_extra_fc:  #
+        # x就是输入的q,(128,1,512)
+        if self.with_extra_fc:
             x = self.hidden2output(x)
-
+        # Extract the target properties from sample_params and embed them into
+        # a higher dimensional space.
         target_properties = \
             AutoregressiveDMLL._extract_properties_from_target(
                 sample_params
-            )
+            )  # 从数据中获取四个ref的gt
 
         class_labels = target_properties[0]
         translations = target_properties[1]
         angles = target_properties[3]
 
-        #
-        c = self.fc_class_labels(class_labels)
+        # 将gt转换成feature，teacher forcing
+        c = self.fc_class_labels(class_labels)  # (128,1,23->64)
 
-        tx = self.pe_trans_x(translations[:, :, 0:1])
+        tx = self.pe_trans_x(translations[:, :, 0:1])  # (128,1,1->64)
         ty = self.pe_trans_y(translations[:, :, 1:2])
         tz = self.pe_trans_z(translations[:, :, 2:3])
 
-        a = self.pe_angle_z(angles)  #
+        a = self.pe_angle_z(angles)
+        # 预测
+        class_labels = self.class_layer(x)  # 用q预测类别
 
-        class_labels = self.class_layer(x)  #
-
-        cf = torch.cat([x, c], dim=-1)  #
+        cf = torch.cat([x, c], dim=-1)  # 将q和类别gt拼接预测位置, teacher forcing
         # Using the true class label we now want to predict the translations
         translations = (
             self.centroid_layer_x(cf),
@@ -294,5 +300,4 @@ class AutoregressiveDMLL(Hidden2Output):
             self.size_layer_y(sf),
             self.size_layer_z(sf)
         )
-
-        return self.bbox_output(sizes, translations, angles, class_labels)  #
+        return self.bbox_output(sizes, translations, angles, class_labels)  # 用预测的值初始化类AutoregressiveBBoxOutput

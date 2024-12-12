@@ -1,3 +1,10 @@
+#
+# Copyright (C) 2021 NVIDIA Corporation.  All rights reserved.
+# Modifications Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+#
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -7,7 +14,7 @@ import torch.nn.functional as F
 class FeedForward(nn.Module):
     def __init__(self, d_model: int, d_ff, dropout, activation):
         super().__init__()
-
+        # We set d_ff as a default to 2048
         self.linear_1 = nn.Linear(d_model, d_ff)
         self.dropout = nn.Dropout(dropout)
         self.linear_2 = nn.Linear(d_ff, d_model)
@@ -20,7 +27,7 @@ def attention(q, k, v, d_k, mask=None, dropout=None):
     scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(d_k)
     if mask is not None:
         mask = mask.unsqueeze(1)
-        scores = scores.masked_fill(mask == 1, -1e9)
+        scores = scores.masked_fill(mask == 1, -1e9)  # mask为1的填充为极小值
 
     scores = F.softmax(scores, dim=-1)
     if dropout is not None:

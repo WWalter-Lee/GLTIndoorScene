@@ -1,3 +1,9 @@
+# 
+# Copyright (C) 2021 NVIDIA Corporation.  All rights reserved.
+# Modifications Copyright (C) 2024 Yijie Li. All rights reserved.
+# Licensed under the NVIDIA Source Code License.
+# See LICENSE at https://github.com/nv-tlabs/ATISS.
+# 
 
 import torch
 from ..losses import cross_entropy_loss, dmll
@@ -89,9 +95,15 @@ class AutoregressiveBBoxOutput(BBoxOutput):
 
         assert torch.sum(target["labels"][..., -2]).item() == 0  #
 
-        label_loss = cross_entropy_loss(self.class_labels, target["labels"])  # (128,1,23)，
+        # For the class labels compute the cross entropy loss between the
+        # target and the predicted labels
+        label_loss = cross_entropy_loss(self.class_labels, target["labels"])
 
-        translation_loss = dmll(self.translations_x, target["translations_x"])  #
+        # For the translations, sizes and angles compute the discretized
+        # logistic mixture likelihood as described in (pixelcnn++中描述的离散混合logistic似然)
+        # PIXELCNN++: Improving the PixelCNN with Discretized Logistic Mixture Likelihood and
+        # Other Modifications, by Salimans et al.
+        translation_loss = dmll(self.translations_x, target["translations_x"])
         translation_loss += dmll(self.translations_y, target["translations_y"])
         translation_loss += dmll(self.translations_z, target["translations_z"])
         size_loss = dmll(self.sizes_x, target["sizes_x"])
@@ -107,8 +119,7 @@ class AutoregressiveBBoxOutput(BBoxOutput):
             self.get_losses_fine(X_target)
 
         # import numpy
-        # a = numpy.array(label_loss.cpu().detach())
-        label_loss = label_loss.mean()  # 改回mean
+        label_loss = label_loss.mean()
 
         translation_loss = translation_loss.mean()
         size_loss = size_loss.mean()
@@ -135,14 +146,12 @@ class AutoregressiveOutput_Rough(object):
             class_labels = t["class_labels_tr"]
             translations = t["translations_tr"]
             sizes = t["sizes_tr"]
-            #
             angles = t["angles_tr"]
         else:
             assert len(t.shape) == 3
             class_labels = t[:, :, :-7]
             translations = t[:, :, -7:-4]
             sizes = t[:, :, -4:-1]
-            #
             angles = t[:, :, -1:]
 
         return class_labels, translations, sizes, angles
@@ -159,7 +168,6 @@ class AutoregressiveOutput_Rough(object):
         target["sizes_x"] = target_bbox_params[2][:, :, 0:1]
         target["sizes_y"] = target_bbox_params[2][:, :, 1:2]
         target["sizes_z"] = target_bbox_params[2][:, :, 2:3]
-        #
         target["angles"] = target_bbox_params[3]
 
         return target
@@ -169,7 +177,14 @@ class AutoregressiveOutput_Rough(object):
 
         assert torch.sum(target["labels"][..., -2]).item() == 0  #
 
-        label_loss = cross_entropy_loss(self.class_labels, target["labels"])  #
+        # For the class labels compute the cross entropy loss between the
+        # target and the predicted labels
+
+        label_loss = cross_entropy_loss(self.class_labels, target["labels"])
+        # For the translations, sizes and angles compute the discretized
+        # logistic mixture likelihood as described in (pixelcnn++中描述的离散混合logistic似然)
+        # PIXELCNN++: Improving the PixelCNN with Discretized Logistic Mixture Likelihood and
+        # Other Modifications, by Salimans et al.
         translation_loss = dmll(self.translations_x, target["translations_x"])
         translation_loss += dmll(self.translations_y, target["translations_y"])
         translation_loss += dmll(self.translations_z, target["translations_z"])
@@ -182,7 +197,7 @@ class AutoregressiveOutput_Rough(object):
         # Compute the losses
         label_loss, translation_loss, size_loss = self.get_losses_rough(X_target)
 
-        label_loss = label_loss.mean()  # 改回mean
+        label_loss = label_loss.mean()
         translation_loss = translation_loss.mean()
         size_loss = size_loss.mean()
         loss_rough = label_loss + translation_loss + size_loss
