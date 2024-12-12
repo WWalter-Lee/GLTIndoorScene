@@ -51,7 +51,7 @@ For living and dining rooms, adjust the room size to 6.2m from the default 3.1m 
 
 Please note that the initial run of `preprocess_data.py` takes time to get the `threed_front.pkl` file with data for all rooms in the scenes. After obtaining it, you can speed up the script by uncommenting `path_to_scene` in `\GLTScene\scene_synthesis\datasets\threed_front.py`(line 179).
 
-## pickle the 3D-FUTURE dataset
+## Pickle the 3D-FUTURE dataset
 
 Most of the scripts need a path to a pickled `ThreedFutureDataset` file. Use  `pickle_threed_future_dataset.py` to generate it:
 
